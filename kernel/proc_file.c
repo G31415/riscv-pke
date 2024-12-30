@@ -221,3 +221,27 @@ int do_link(char *oldpath, char *newpath) {
 int do_unlink(char *path) {
   return vfs_unlink(path);
 }
+
+//
+// read the current working directory
+//
+int do_read_cwd(char *path) {
+  proc_file_management *pfiles = current->pfiles;
+  struct dentry *cwd = pfiles->cwd;
+  if (cwd == NULL) return -1;
+  if (cwd->name[0] != '/') strcpy(path, "/");
+  else strcpy(path, "");
+  strcat(path, cwd->name);
+  return 0;
+}
+
+//
+// change the current working directory
+//
+int do_change_cwd(char *path) {
+  struct dentry *parent = get_start_dentry(path);
+  struct dentry *new_cwd = lookup_final_dentry(path, &parent, NULL);
+  if (new_cwd == NULL) return -1;
+  current->pfiles->cwd = new_cwd;
+  return 0;
+}

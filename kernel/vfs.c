@@ -9,6 +9,7 @@
 #include "util/string.h"
 #include "util/types.h"
 #include "util/hash_table.h"
+#include "process.h"
 
 struct dentry *vfs_root_dentry;               // system root direntry
 struct super_block *vfs_sb_list[MAX_MOUNTS];  // system superblock list
@@ -109,7 +110,7 @@ struct super_block *vfs_mount(const char *dev_name, int mnt_type) {
 // return: the file pointer to the opened file.
 //
 struct file *vfs_open(const char *path, int flags) {
-  struct dentry *parent = vfs_root_dentry; // we start the path lookup from root.
+  struct dentry *parent = get_start_dentry(path);
   char miss_name[MAX_PATH_LEN];
 
   // path lookup.
@@ -260,7 +261,7 @@ int vfs_disk_stat(struct file *file, struct istat *istat) {
 // return: -1 on failure, 0 on success.
 //
 int vfs_link(const char *oldpath, const char *newpath) {
-  struct dentry *parent = vfs_root_dentry;
+  struct dentry *parent = get_start_dentry(oldpath);
   char miss_name[MAX_PATH_LEN];
 
   // lookup oldpath
@@ -276,7 +277,7 @@ int vfs_link(const char *oldpath, const char *newpath) {
     return -1;
   }
 
-  parent = vfs_root_dentry;
+  parent = get_start_dentry(newpath);
   // lookup the newpath
   // note that parent is changed to be the last directory entry to be accessed
   struct dentry *new_file_dentry =
@@ -310,7 +311,7 @@ int vfs_link(const char *oldpath, const char *newpath) {
 // return: -1 on failure, 0 on success.
 //
 int vfs_unlink(const char *path) {
-  struct dentry *parent = vfs_root_dentry;
+  struct dentry *parent = get_start_dentry(path);
   char miss_name[MAX_PATH_LEN];
 
   // lookup the file, find its parent direntry
@@ -399,7 +400,7 @@ int vfs_close(struct file *file) {
 // open a dir at vfs layer. the directory must exist on disk.
 //
 struct file *vfs_opendir(const char *path) {
-  struct dentry *parent = vfs_root_dentry;
+  struct dentry *parent = get_start_dentry(path);
   char miss_name[MAX_PATH_LEN];
 
   // lookup the dir
@@ -443,7 +444,7 @@ int vfs_readdir(struct file *file, struct dir *dir) {
 // and its parent directory must exist.
 //
 int vfs_mkdir(const char *path) {
-  struct dentry *parent = vfs_root_dentry;
+  struct dentry *parent = get_start_dentry(path);
   char miss_name[MAX_PATH_LEN];
 
   // lookup the dir, find its parent direntry
@@ -522,6 +523,19 @@ struct dentry *lookup_final_dentry(const char *path, struct dentry **parent,
   struct dentry *this = *parent;
 
   while (token != NULL) {
+    // deal with "." and ".."
+    if (strcmp(token, ".") == 0) {
+      token = strtok(NULL, "/");
+      continue;
+    } else if (strcmp(token, "..") == 0) {
+      if (this == vfs_root_dentry) {
+        token = strtok(NULL, "/");
+        continue;
+      }
+      this = this->parent;
+      token = strtok(NULL, "/");
+      continue;
+    }
     *parent = this;
     this = hash_get_dentry((*parent), token);  // try hash first
     if (this == NULL) {
@@ -721,3 +735,8 @@ struct vinode *default_alloc_vinode(struct super_block *sb) {
 }
 
 struct file_system_type *fs_list[MAX_SUPPORTED_FS];
+
+struct dentry *get_start_dentry(const char *path) {
+  if (path[0] == '.') return current->pfiles->cwd;
+  else return vfs_root_dentry;
+}
