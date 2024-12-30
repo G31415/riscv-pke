@@ -106,4 +106,7 @@ int do_fork(process* parent);
 // current running process
 extern process* current;
 
+// address of the first free page in our simple heap. added @lab2_2
+extern uint64 g_ufree_page;
+
 #endif
