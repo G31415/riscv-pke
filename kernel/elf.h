@@ -60,4 +60,42 @@ elf_status elf_load(elf_ctx *ctx);
 
 void load_bincode_from_host_elf(process *p);
 
+/* ==================================== */
+extern elf_ctx elfloader;
+
+#define MAX_CMDLINE_ARGS 64
+#define SHT_SYMTAB 2
+#define SHT_STRTAB 3
+#define STT_FUNC 2
+#define MAX_DEPTH 20
+#define STRTAB_MAX 400
+#define ELF64_ST_TYPE(info) ((info) & 0xf)
+
+// elf section header, in total 64 bytes  
+// 节头表项中的具体内容
+typedef struct elf_sect_header_t{  
+  uint32 name;  
+  uint32 type;  
+  uint64 flags;  
+  uint64 addr;    /*the first byte of the section.*/  
+  uint64 offset;  /*此成员的取值给出节区的第一个字节与文件头之间的偏移*/  
+  uint64 size;  
+  uint32 link;  
+  uint32 info;  
+  uint64 addralign;  
+  uint64 entsize;  
+} elf_sect_header;  
+
+// .symtab节中的内容
+typedef struct elf_sym_t {
+  uint32 name;
+  uint8 info;
+  uint8 other;
+  uint16 shndx;
+  uint64 value;
+  uint64 size;
+} elf_sym;
+
+void elf_print_backtrace(int depth, process *p);
+
 #endif

@@ -13,6 +13,7 @@ typedef struct elf_info_t {
   process *p;
 } elf_info;
 
+elf_ctx elfloader;
 //
 // the implementation of allocater. allocates memory space for later segment loading
 //
@@ -114,7 +115,7 @@ void load_bincode_from_host_elf(process *p) {
   sprint("Application: %s\n", arg_bug_msg.argv[0]);
 
   //elf loading. elf_ctx is defined in kernel/elf.h, used to track the loading process.
-  elf_ctx elfloader;
+  // elf_ctx elfloader;
   // elf_info is defined above, used to tie the elf file and its corresponding process.
   elf_info info;
 
@@ -137,4 +138,69 @@ void load_bincode_from_host_elf(process *p) {
   spike_file_close( info.f );
 
   sprint("Application program entry point (virtual address): 0x%lx\n", p->trapframe->epc);
+}
+
+void elf_print_backtrace(int depth, process *p) { 
+    int i, off; 
+    elf_sect_header strtab; 
+
+    // 获取字符串表头信息
+    for (i = 0, off = elfloader.ehdr.shoff; i < elfloader.ehdr.shnum; i++, off += sizeof(strtab)) { 
+        if (elf_fpread(&elfloader, (void *)&strtab, sizeof(elf_sect_header), off) != sizeof(elf_sect_header)) 
+            panic("string table header get failed!\n"); 
+        if (strtab.type == SHT_STRTAB) 
+            break; 
+    } 
+
+    // 保存字符串表
+    char strtab_info[STRTAB_MAX]; 
+    if (elf_fpread(&elfloader, (void *)strtab_info, sizeof(strtab_info), strtab.offset) != sizeof(strtab_info)) 
+        panic("string table get failed!\n"); 
+
+    // 获取符号表头信息
+    elf_sect_header symtab; 
+    for (i = 0, off = elfloader.ehdr.shoff; i < elfloader.ehdr.shnum; i++, off += sizeof(symtab)) { 
+        if (elf_fpread(&elfloader, (void *)&symtab, sizeof(elf_sect_header), off) != sizeof(elf_sect_header)) 
+            panic("symbol table header get failed!\n"); 
+        if (symtab.type == SHT_SYMTAB) 
+            break; 
+    } 
+
+    // 保存符号表信息
+    int sym_num = 0; 
+    elf_sym symbols[MAX_DEPTH]; 
+    elf_sym temp; 
+    off = symtab.offset; 
+    for (i = 0; i < symtab.size / symtab.entsize; i++) { 
+        if (elf_fpread(&elfloader, (void *)&temp, sizeof(temp), off) != sizeof(temp)) 
+            panic("symbol table get failed!\n"); 
+        if ((ELF64_ST_TYPE(temp.info)) == STT_FUNC) { 
+            symbols[sym_num] = temp; 
+            sym_num++; 
+        } 
+        off += sizeof(temp); 
+    }
+
+    // 使用 fp 跟踪栈帧
+    uint64 fp = *(uint64*)(p->trapframe->regs.s0 - 8);
+    uint64 ra = *(uint64*)(fp - 8);
+
+    // 回溯栈帧
+    for (i = 0; i < depth; i++) {
+        int found = 0;
+        for (int j = 0; j < sym_num; j++) {
+            if (ra >= symbols[j].value && ra < symbols[j].value + symbols[j].size) {
+                sprint("%s\n", strtab_info + symbols[j].name);  // 输出函数名
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            sprint("Unable to find symbol for address: %lx\n", ra);
+            break;
+        }
+        fp = *(uint64 *)(fp - 16);
+        ra = *(uint64 *)(fp - 8);
+    }
+    return;
 }
