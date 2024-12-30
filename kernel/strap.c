@@ -9,6 +9,7 @@
 #include "pmm.h"
 #include "vmm.h"
 #include "util/functions.h"
+#include "memlayout.h"
 
 #include "spike_interface/spike_utils.h"
 
@@ -55,18 +56,31 @@ void handle_mtimer_trap()
 void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval) {
   sprint("handle_page_fault: %lx\n", stval);
   switch (mcause) {
-    case CAUSE_STORE_PAGE_FAULT:
-      // TODO (lab2_3): implement the operations that solve the page fault to
-      // dynamically increase application stack.
-      // hint: first allocate a new physical page, and then, maps the new page to the
-      // virtual address that causes the page fault.
-      {
-        void* pa = alloc_page();
-        user_vm_map((pagetable_t)current->pagetable, stval, 1, (uint64)pa,
-         prot_to_type(PROT_WRITE | PROT_READ, 1));
-        break;
+    case CAUSE_STORE_PAGE_FAULT: {
+      // 检查是否为堆内存的页面错误
+      if (stval >= g_ufree_page && stval < g_ufree_page + PGSIZE) {
+          sprint("this address is not available!\n");
+          shutdown(-1);
+          break;
+      }
+
+      // 对齐触发页面错误的地址
+      uint64 aligned_stval = stval & ~(PGSIZE - 1);
+
+      // 分配新的物理页面
+      uint64 new_user_stack = (uint64)alloc_page();
+      if (!new_user_stack) {
+          sprint("Failed to allocate a new physical page.\n");
+          shutdown(-1);
+      }
+
+      // 映射物理页面到虚拟地址
+      if (map_pages(current->pagetable, aligned_stval, PGSIZE, new_user_stack, prot_to_type(PROT_WRITE | PROT_READ, 1)) != 0) {
+          sprint("Failed to map the virtual address: 0x%lx to physical page: 0x%lx\n", aligned_stval, new_user_stack);
+          shutdown(-1);
       }
       break;
+    }
     default:
       sprint("unknown page fault.\n");
       break;
