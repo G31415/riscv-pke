@@ -103,8 +103,7 @@ void smode_trap_handler(void)
 {
   // make sure we are in User mode before entering the trap handling.
   // we will consider other previous case in lab1_3 (interrupt).
-  if ((read_csr(sstatus) & SSTATUS_SPP) != 0)
-    panic("usertrap: not from user mode");
+  if ((read_csr(sstatus) & SSTATUS_SPP) != 0) panic("usertrap: not from user mode");
 
   assert(current);
   // save user process counter.
