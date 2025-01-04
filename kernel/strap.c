@@ -56,31 +56,23 @@ void handle_mtimer_trap()
 void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval) {
   sprint("handle_page_fault: %lx\n", stval);
   switch (mcause) {
-    case CAUSE_STORE_PAGE_FAULT: {
+    case CAUSE_STORE_PAGE_FAULT: 
       // 检查是否为堆内存的页面错误
       if (stval >= g_ufree_page && stval < g_ufree_page + PGSIZE) {
-          sprint("this address is not available!\n");
-          shutdown(-1);
+          panic("this address is not available!");
           break;
       }
-
-      // 对齐触发页面错误的地址
-      uint64 aligned_stval = stval & ~(PGSIZE - 1);
-
-      // 分配新的物理页面
-      uint64 new_user_stack = (uint64)alloc_page();
-      if (!new_user_stack) {
-          sprint("Failed to allocate a new physical page.\n");
-          shutdown(-1);
+      uint64 pa = (uint64)alloc_page();
+      if(!pa) {
+        panic("alloc physical page failed!");
+        return;
       }
-
-      // 映射物理页面到虚拟地址
-      if (map_pages(current->pagetable, aligned_stval, PGSIZE, new_user_stack, prot_to_type(PROT_WRITE | PROT_READ, 1)) != 0) {
-          sprint("Failed to map the virtual address: 0x%lx to physical page: 0x%lx\n", aligned_stval, new_user_stack);
-          shutdown(-1);
+      uint64 va = ROUNDDOWN(stval, PGSIZE);
+      assert( current );
+      if (map_pages(current->pagetable, va, PGSIZE, pa, prot_to_type(PROT_READ | PROT_WRITE, 1))!=0){
+        panic("map pg to vg failed!");
       }
       break;
-    }
     default:
       sprint("unknown page fault.\n");
       break;
