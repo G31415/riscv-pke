@@ -258,46 +258,32 @@ int do_fork( process* parent)
 //pid is illegal,return -1
 uint64 wait(uint64 pid)
 {
-  if(pid==-1)//look up for child process to return
-  {
-    int child=-1;
-    for(int j=0;j<NPROC;j++)
-    {
-      if(procs[j].parent == current)//child process
-      {
-        child=j;
-        if(procs[j].status == ZOMBIE)//child process is zombie
-        {
-          procs[j].status = FREE;
-          current->block_id = 0;
-          return procs[j].pid;
+  process* child = NULL;
+
+  if (pid == -1) { // 等待任何子进程
+    for (int i = 0; i < NPROC; i++) {
+      if (procs[i].parent == current) { // 找到子进程
+        child = &procs[i];
+        if (child->status == ZOMBIE) { // 子进程已死
+          child->status = FREE; // 回收子进程
+          return child->pid;
         }
       }
     }
-    if(child==-1) return -1;//no child process
-    else //child process all running, parent process turns into blocked
-    {
-      current->block_id |= 1<<procs[child].pid;
+    // 如果没有找到死掉的子进程，阻塞当前进程
+    if (child != NULL) {
+      current->status = BLOCKED;
+      return -2; // 当前进程被阻塞，等待子进程终止
+    }
+  } else if (pid >= 0 && pid < NPROC && procs[pid].parent == current) { // 等待特定子进程
+    if (procs[pid].status == ZOMBIE) { // 子进程已死
+      procs[pid].status = FREE;
+      return pid;
+    } else { // 子进程仍然存活
       current->status = BLOCKED;
       return -2;
     }
   }
-  else if(pid>0&&pid<NPROC){//pid is legal
-    if(procs[pid].parent == current)
-    {
-      if(procs[pid].status == ZOMBIE)
-      {
-        procs[pid].status = FREE;
-        current->block_id = 0;
-        return procs[pid].pid;
-      }
-      else{
-        current->block_id |= 1<<procs[pid].pid;
-        current->status = BLOCKED;
-        return -2;
-      }
-    }
-    else return -1;//this pid is not child process
-  }
-  else return -1;//pid is illegal
+
+  return -1; // 无效的 pid 或者非当前进程的子进程
 }

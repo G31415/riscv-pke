@@ -110,18 +110,16 @@ ssize_t sys_user_yield() {
 
 uint64 sys_user_wait(uint64 pid)
 {
-  while(1){
-    uint64 x=wait(pid);
-    if(x==-2)//parent process is blocked
+    uint64 x = wait(pid);
+    if(x == -2) //parent process is blocked
     {
       schedule();
       return x;
     }
-    else{//not blocked
+    else{ //not blocked
       sys_user_yield();
       return x;
     }
-  }
 } 
 
 //
