@@ -26,6 +26,9 @@ typedef struct process_t {
   pagetable_t pagetable;
   // trapframe storing the context of a (User mode) process.
   trapframe* trapframe;
+  // added @lab2_challenge2
+  // process's free block list and busy block list
+  struct mBlock *freeB_head, *busyB_head;
 }process;
 
 // switch to run user app

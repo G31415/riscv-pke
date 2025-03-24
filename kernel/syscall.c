@@ -57,6 +57,17 @@ uint64 sys_user_free_page(uint64 va) {
   return 0;
 }
 
+//added @lab2_challenge2
+uint64 sys_user_allocate(int size) {
+      return alloc_in_block(size);
+}
+
+//added @lab2_challenge2
+uint64 sys_user_free(uint64 va) {
+  free_in_block(va);
+  return 0;
+}
+
 //
 // [a0]: the syscall number; [a1] ... [a7]: arguments to the syscalls.
 // returns the code of success, (e.g., 0 means success, fail for otherwise)
@@ -67,11 +78,11 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
       return sys_user_print((const char*)a1, a2);
     case SYS_user_exit:
       return sys_user_exit(a1);
-    // added @lab2_2
+    // modified @lab2_challenge2
     case SYS_user_allocate_page:
-      return sys_user_allocate_page();
+      return sys_user_allocate(a1);
     case SYS_user_free_page:
-      return sys_user_free_page(a1);
+      return sys_user_free(a1);
     default:
       panic("Unknown syscall %ld \n", a0);
   }
