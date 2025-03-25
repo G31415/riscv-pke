@@ -5,6 +5,7 @@
 #include "util/string.h"
 #include "memlayout.h"
 #include "spike_interface/spike_utils.h"
+#include "kernel/sync_utils.h"
 
 // _end is defined in kernel/kernel.lds, it marks the ending (virtual) address of PKE kernel
 extern char _end[];
@@ -33,10 +34,13 @@ static void create_freepage_list(uint64 start, uint64 end) {
     free_page( (void *)p );
 }
 
+// added in lab2_challenge3
+static volatile int alloc_free_lock = 0; // only one can alloc or free physical addr at the same time
 //
 // place a physical page at *pa to the free list of g_free_mem_list (to reclaim the page)
 //
 void free_page(void *pa) {
+  sync_spinlock_lock(&alloc_free_lock); //lock
   if (((uint64)pa % PGSIZE) != 0 || (uint64)pa < free_mem_start_addr || (uint64)pa >= free_mem_end_addr)
     panic("free_page 0x%lx \n", pa);
 
@@ -44,6 +48,7 @@ void free_page(void *pa) {
   list_node *n = (list_node *)pa;
   n->next = g_free_mem_list.next;
   g_free_mem_list.next = n;
+  sync_spinlock_unlock(&alloc_free_lock); // unlock
 }
 
 //
@@ -51,12 +56,14 @@ void free_page(void *pa) {
 // Allocates only ONE page!
 //
 void *alloc_page(void) {
+  sync_spinlock_lock(&alloc_free_lock);
   list_node *n = g_free_mem_list.next;
-  uint64 hartid = 0;
+  uint64 hartid = read_tp();
   if (vm_alloc_stage[hartid]) {
     sprint("hartid = %ld: alloc page 0x%x\n", hartid, n);
   }
   if (n) g_free_mem_list.next = n->next;
+  sync_spinlock_unlock(&alloc_free_lock);
   return (void *)n;
 }
 
