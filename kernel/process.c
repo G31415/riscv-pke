@@ -191,7 +191,7 @@ int do_fork( process* parent)
         memcpy( (void*)lookup_pa(child->pagetable, child->mapped_info[STACK_SEGMENT].va),
           (void*)lookup_pa(parent->pagetable, parent->mapped_info[i].va), PGSIZE );
         break;
-      case HEAP_SEGMENT:
+      case HEAP_SEGMENT:{
         // build a same heap for child process.
 
         // convert free_pages_address into a filter to skip reclaimed blocks in the heap
@@ -221,7 +221,8 @@ int do_fork( process* parent)
         // copy the heap manager from parent to child
         memcpy((void*)&child->user_heap, (void*)&parent->user_heap, sizeof(parent->user_heap));
         break;
-      case CODE_SEGMENT:
+      }
+      case CODE_SEGMENT: {
         // TODO (lab3_1): implment the mapping of child code segment to parent's
         // code segment.
         // hint: the virtual address mapping of code segment is tracked in mapped_info
@@ -231,14 +232,17 @@ int do_fork( process* parent)
         // address region of child to the physical pages that actually store the code
         // segment of parent process.
         // DO NOT COPY THE PHYSICAL PAGES, JUST MAP THEM.
-        // panic( "You need to implement the code segment mapping of child in lab3_1.\n" );
-
-        uint64 pa = lookup_pa(parent->pagetable,parent->mapped_info[i].va);
-        pa = pa + ((parent->mapped_info[i].va) & ((1<<PGSHIFT) -1));
-        //sprint("before mp\n");
-        user_vm_map(child->pagetable, parent->mapped_info[i].va,PGSIZE, pa,
-        prot_to_type(PROT_EXEC | PROT_READ, 1));
-
+        //panic( "You need to implement the code segment mapping of child in lab3_1.\n" );
+        uint64 va_parent = parent->mapped_info[i].va;
+        uint64 npages = parent->mapped_info[i].npages;
+        int perm = prot_to_type(PROT_EXEC | PROT_READ, 1);
+        for (int j = 0;j < npages;++ j) {
+          uint64 pa_parent = lookup_pa(parent->pagetable, va_parent + j * PGSIZE);
+          // if (pa_parent == 0) {
+          //   panic("CODE_SEGMENT mapping failed");
+          // }
+          map_pages(child->pagetable, va_parent + j * PGSIZE, PGSIZE, pa_parent, perm);
+        }
         // after mapping, register the vm region (do not delete codes below!)
         child->mapped_info[child->total_mapped_region].va = parent->mapped_info[i].va;
         child->mapped_info[child->total_mapped_region].npages =
@@ -246,6 +250,7 @@ int do_fork( process* parent)
         child->mapped_info[child->total_mapped_region].seg_type = CODE_SEGMENT;
         child->total_mapped_region++;
         break;
+      }
     }
   }
 
@@ -255,4 +260,58 @@ int do_fork( process* parent)
   insert_to_ready_queue( child );
 
   return child->pid;
+}
+
+// added in lab3_challenge2
+#define NSEM 100
+#define SEM_FREE (-1 - NPROC)
+int32 sem_array[NSEM];
+process *sem_wl_head[NSEM]; // sem's waiting list
+
+void sem_array_init() {
+  for(size_t i = 0;i < NSEM;++ i)
+    sem_array[i] = SEM_FREE;
+}
+
+uint32 create_sem(int32 v) {
+  for(size_t i = 0;i < NSEM;++ i) {
+    if (sem_array[i] == SEM_FREE) {
+      sem_array[i] = v;
+      return i;
+    }
+  }
+  panic("Create semaphore failed!");
+  return -1;
+}
+
+ssize_t do_sem_P(int32 sem_id) {
+  if (sem_id < 0 || sem_array[sem_id] == SEM_FREE) {
+    panic("Invalid semaphore ID: %d when doing P operation", sem_id);
+    return -1;
+  }
+  sem_array[sem_id] --;
+  if (sem_array[sem_id] < 0) { 
+    // as we clear the list in V at once, there is no need to queue in order
+    if (sem_wl_head[sem_id] != NULL)
+      current->sem_wl_next = sem_wl_head[sem_id]->sem_wl_next;
+    else current->sem_wl_next = NULL;
+    sem_wl_head[sem_id] = current;
+    schedule();
+  }
+  return 0;
+}
+
+ssize_t do_sem_V(int32 sem_id) {
+  if (sem_id < 0 || sem_array[sem_id] == SEM_FREE) {
+    panic("Invalid semaphore ID: %d when doing V operation", sem_id);
+    return -1;
+  }
+  sem_array[sem_id] ++;
+  if (sem_array[sem_id] <= 0) {
+    if (sem_wl_head[sem_id] != NULL) {
+      insert_to_ready_queue(sem_wl_head[sem_id]);
+      sem_wl_head[sem_id] = sem_wl_head[sem_id]->sem_wl_next;
+    }
+  }
+  return 0;
 }

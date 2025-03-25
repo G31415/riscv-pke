@@ -98,6 +98,20 @@ ssize_t sys_user_yield() {
   return 0;
 }
 
+// added @lab3_challenge2
+uint32 sys_user_sem_new(int32 v) {
+  if (v < 0) panic("The initial value of samaphore can't be less than zero");
+  return create_sem(v);
+}
+
+ssize_t sys_user_sem_P(int32 sem_id) {
+  return do_sem_P(sem_id);
+}
+
+ssize_t sys_user_sem_V(int32 sem_id) {
+  return do_sem_V(sem_id);
+}
+
 //
 // [a0]: the syscall number; [a1] ... [a7]: arguments to the syscalls.
 // returns the code of success, (e.g., 0 means success, fail for otherwise)
@@ -117,6 +131,13 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
       return sys_user_fork();
     case SYS_user_yield:
       return sys_user_yield();
+    // added @lab3_challenge2
+    case SYS_user_sem_new:
+      return sys_user_sem_new(a1);
+    case SYS_user_sem_P:
+      return sys_user_sem_P(a1);
+    case SYS_user_sem_V:
+      return sys_user_sem_V(a1);
     default:
       panic("Unknown syscall %ld \n", a0);
   }
