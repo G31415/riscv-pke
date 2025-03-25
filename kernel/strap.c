@@ -16,8 +16,7 @@
 //
 // handling the syscalls. will call do_syscall() defined in kernel/syscall.c
 //
-static void handle_syscall(trapframe *tf)
-{
+static void handle_syscall(trapframe *tf) {
   // tf->epc points to the address that our computer will jump to after the trap handling.
   // for a syscall, we should return to the NEXT instruction after its handling.
   // in RV64G, each instruction occupies exactly 32 bits (i.e., 4 Bytes)
@@ -27,7 +26,13 @@ static void handle_syscall(trapframe *tf)
   // kernel/syscall.c) to conduct real operations of the kernel side for a syscall.
   // IMPORTANT: return value should be returned to user app, or else, you will encounter
   // problems in later experiments!
-  tf->regs.a0 = do_syscall(tf->regs.a0, tf->regs.a1, tf->regs.a2, tf->regs.a3, tf->regs.a4, tf->regs.a5, tf->regs.a6, tf->regs.a7);
+  //panic( "call do_syscall to accomplish the syscall and lab1_1 here.\n" );
+  tf->regs.a0 = do_syscall((*tf).regs.a0, (*tf).regs.a1, (*tf).regs.a2, (*tf).regs.a3,
+              (*tf).regs.a4, (*tf).regs.a5, (*tf).regs.a6, (*tf).regs.a7);
+  // asm volatile (
+  //   "add a0, zero, %0"
+  //   : "=r"(ret)
+  // );
 }
 
 //
@@ -36,16 +41,14 @@ static uint64 g_ticks = 0;
 //
 // added @lab1_3
 //
-void handle_mtimer_trap()
-{
-  // 打印当前的 ticks
+void handle_mtimer_trap() {
   sprint("Ticks %d\n", g_ticks);
   // TODO (lab1_3): increase g_ticks to record this "tick", and then clear the "SIP"
   // field in sip register.
   // hint: use write_csr to disable the SIP_SSIP bit in sip.
-  g_ticks++;
-  write_csr(sip, !SIP_SSIP);
-
+  //panic( "lab1_3: increase g_ticks by one, and clear SIP field in sip register.\n" );
+  g_ticks ++;
+  write_csr(sip, 0);
 }
 
 //
@@ -54,20 +57,35 @@ void handle_mtimer_trap()
 // stval: the virtual address that causes pagefault when being accessed.
 //
 void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval) {
-  sprint("handle_page_fault: %lx\n", stval);
+  sprint("handle_page_fault: %lx\n", stval);// %x, mcause
   switch (mcause) {
     case CAUSE_STORE_PAGE_FAULT:
       // TODO (lab2_3): implement the operations that solve the page fault to
       // dynamically increase application stack.
       // hint: first allocate a new physical page, and then, maps the new page to the
       // virtual address that causes the page fault.
-      {
-        void* pa = alloc_page();
-        user_vm_map((pagetable_t)current->pagetable, stval, 1, (uint64)pa,
-         prot_to_type(PROT_WRITE | PROT_READ, 1));
-        break;
-      }
-      break;
+      // panic( "You need to implement the operations that actually handle the page fault in lab2_3.\n" );
+      
+      // (stval < USER_STACK_TOP) {
+        //page_walk(current->pagetable, stval, 1);
+        {
+          pte_t* pte = page_walk(current->pagetable, ROUNDDOWN(stval, PGSIZE), 0);
+          if (pte == NULL) {
+            pagetable_t pa = (pagetable_t)alloc_page();
+            map_pages(current->pagetable, ROUNDDOWN(stval, PGSIZE), PGSIZE, (uint64)pa, prot_to_type(PROT_WRITE | PROT_READ, 1));
+            //sepc += 4;
+          }
+          else if (*pte & PTE_COW_c) { // added in lab3_challenge3
+            child_copy_heap(current, ROUNDDOWN(stval, PGSIZE));
+          }
+          else if (*pte & PTE_COW_p) {
+            parent_copy_heap(current, ROUNDDOWN(stval, PGSIZE));
+          }
+          else panic("Unknown Page Fault");
+          break;
+        }
+      //}
+      
     default:
       sprint("unknown page fault.\n");
       break;
@@ -92,7 +110,6 @@ void rrsched() {
     insert_to_ready_queue( current );
     schedule();
   }
-
 }
 
 //
