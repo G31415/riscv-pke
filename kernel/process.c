@@ -235,14 +235,14 @@ int do_fork( process* parent)
         // address region of child to the physical pages that actually store the code
         // segment of parent process.
         // DO NOT COPY THE PHYSICAL PAGES, JUST MAP THEM.
-        // panic( "You need to implement the code segment mapping of child in lab3_1.\n" );
-
-        uint64 pa = lookup_pa(parent->pagetable,parent->mapped_info[i].va);
-        pa = pa + ((parent->mapped_info[i].va) & ((1<<PGSHIFT) -1));
-        //sprint("before mp\n");
-        user_vm_map(child->pagetable, parent->mapped_info[i].va,PGSIZE, pa,
-        prot_to_type(PROT_EXEC | PROT_READ, 1));
-
+        //panic( "You need to implement the code segment mapping of child in lab3_1.\n" );
+        uint64 va_parent = parent->mapped_info[i].va;
+        uint64 npages = parent->mapped_info[i].npages;
+        int perm = prot_to_type(PROT_EXEC | PROT_READ, 1);
+        for (int j = 0;j < npages;++ j) {
+          uint64 pa_parent = lookup_pa(parent->pagetable, va_parent + j * PGSIZE);
+          map_pages(child->pagetable, va_parent + j * PGSIZE, PGSIZE, pa_parent, perm);
+        }
         // after mapping, register the vm region (do not delete codes below!)
         child->mapped_info[child->total_mapped_region].va = parent->mapped_info[i].va;
         child->mapped_info[child->total_mapped_region].npages =

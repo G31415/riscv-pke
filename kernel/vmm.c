@@ -11,6 +11,8 @@
 #include "spike_interface/spike_utils.h"
 #include "util/functions.h"
 
+#include "user/user_lib.h"
+
 /* --- utility functions for virtual address mapping --- */
 //
 // establish mapping of virtual address [va, va+size] to phyiscal address [pa, pa+size]
@@ -32,7 +34,7 @@ int map_pages(pagetable_t page_dir, uint64 va, uint64 size, uint64 pa, int perm)
 
 //
 // convert permission code to permission types of PTE
-//
+// user 1 kernel 0
 uint64 prot_to_type(int prot, int user) {
   uint64 perm = 0;
   if (prot & PROT_READ) perm |= PTE_R | PTE_A;
@@ -159,11 +161,10 @@ void *user_va_to_pa(pagetable_t page_dir, void *va) {
   // (va & (1<<PGSHIFT -1)) means computing the offset of "va" inside its page.
   // Also, it is possible that "va" is not mapped at all. in such case, we can find
   // invalid PTE, and should return NULL.
-  uint64 pa = lookup_pa(page_dir,(uint64)va);
-  pa = pa + (((uint64)va) & ((1<<PGSHIFT) -1));
-  //uint64* pe=&pa;
-  return (void*)pa;
-
+  //panic( "You have to implement user_va_to_pa (convert user va to pa) to print messages in lab2_1.\n" );
+  uint64 PYHS_ADDR = lookup_pa(page_dir, (uint64)va);
+  if (PYHS_ADDR == 0) return NULL;
+  return (void *)(PYHS_ADDR + ((uint64)va & ((1<<PGSHIFT) - 1)));
 }
 
 //
@@ -187,11 +188,21 @@ void user_vm_unmap(pagetable_t page_dir, uint64 va, uint64 size, int free) {
   // (use free_page() defined in pmm.c) the physical pages. lastly, invalidate the PTEs.
   // as naive_free reclaims only one page at a time, you only need to consider one page
   // to make user/app_naive_malloc to behave correctly.
-  uint64 pa=lookup_pa(page_dir,va);
-  free_page((void*)pa);
-  pte_t *pte=page_walk(page_dir,va,1);
-  *pte=0;
-
+  // panic( "You have to implement user_vm_unmap to free pages using naive_free in lab2_2.\n" );
+  
+  pte_t* pte = page_walk(page_dir, va, 0);
+  if (pte != NULL) {
+    void *pa = (void *)PTE2PA((uint64)*pte);
+    //void* pa = user_va_to_pa(pte_va, (void*)va);
+    if (free) {
+      free_page(pa);
+      //naive_free((void *)va);
+      //*pte_va = 0;
+      //*pte &= ~PTE_V; // set PTE_V = 0
+      *pte = PA2PTE(pa) & ~PTE_V;
+    }
+    
+  }
 }
 
 //

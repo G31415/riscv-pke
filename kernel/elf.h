@@ -65,4 +65,8 @@ elf_status elf_load(elf_ctx *ctx);
 
 void load_bincode_from_host_elf(process *p);
 
+// added @lab4_challenge2
+void load_bincode_from_vfs_elf(process *p);
+int32 switch_executable(process *p, char *path);
+
 #endif
