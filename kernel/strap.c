@@ -61,15 +61,16 @@ void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval) {
       // dynamically increase application stack.
       // hint: first allocate a new physical page, and then, maps the new page to the
       // virtual address that causes the page fault.
-      {
-        void* pa = alloc_page();
-        user_vm_map((pagetable_t)current->pagetable, stval, 1, (uint64)pa,
-         prot_to_type(PROT_WRITE | PROT_READ, 1));
-        break;
-      }
-      break;
+        {
+          pagetable_t pa = (pagetable_t)alloc_page();
+          map_pages(current->pagetable, ROUNDDOWN(stval, PGSIZE), PGSIZE, (uint64)pa, prot_to_type(PROT_WRITE | PROT_READ, 1));
+          //sepc += 4;
+          break;
+        }
+      //}
+      
     default:
-      sprint("unknown page fault.\n");
+      sprint("unknown page fault.\n"); panic("a");
       break;
   }
 }

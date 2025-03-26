@@ -12,6 +12,7 @@
 #include "util/functions.h"
 #include "pmm.h"
 #include "vmm.h"
+#include "elf.h"
 #include "sched.h"
 #include "proc_file.h"
 
@@ -34,6 +35,16 @@ ssize_t sys_user_print(const char* buf, size_t n) {
 //
 ssize_t sys_user_exit(uint64 code) {
   sprint("User exit with code:%d.\n", code);
+  // added in lab4_challenge3 to implement wait(same as lab3_challenge1)
+  if (current->parent != NULL) {
+    process *parent = current->parent;
+    if (parent->status == BLOCKED && (parent->trapframe->regs.a0 == -1
+      || parent->trapframe->regs.a0 == current->pid)) {
+        parent->status = READY;
+        parent->trapframe->regs.a0 = current->pid;
+        insert_to_ready_queue(parent);
+    }
+  }
   // reclaim the current process, and reschedule. added @lab3_1
   free_process( current );
   schedule();
@@ -91,11 +102,9 @@ ssize_t sys_user_yield() {
   // we should set the status of currently running process to READY, insert it in
   // the rear of ready queue, and finally, schedule a READY process to run.
   // panic( "You need to implement the yield syscall in lab3_2.\n" );
-
   current->status = READY;
-  insert_to_ready_queue( current );
+  insert_to_ready_queue(current);
   schedule();
-  
   return 0;
 }
 
@@ -217,6 +226,42 @@ ssize_t sys_user_unlink(char * vfn){
   return do_unlink(pfn);
 }
 
+// added in lab4_challenge3
+ssize_t sys_user_wait(int pid) {
+  int ret = do_wait(pid);
+  if (ret == -1) {
+    return -1;
+  }
+  schedule();
+  return ret; // it won't run here actually
+}
+
+// added in lab4_challenge3
+ssize_t sys_user_exec(char *v_command, char *v_para) {
+  char *command = (char *)user_va_to_pa((pagetable_t)(current->pagetable), (void *)v_command);
+  char *para = (char *)user_va_to_pa((pagetable_t)(current->pagetable), v_para);
+  //sprint("command: %s, params: %s\n",command, para);
+  char temp_para[100]; 
+  // stroe in the kernel stack, or the para pyhsics page will be fee after switch_exec
+  strcpy(temp_para, para); // cant use memcpy because para is pointer, sizeof(para) is 8
+  //sprint("%s\n", temp_para);
+  uint64 exit_code = 0;
+  exit_code = switch_executable(current, command); 
+  // argc : int ; argv : char** ;
+  // uint64 argc_va = sys_user_allocate_page();
+  uint64 argv_va = sys_user_allocate_page();
+  uint64 para_va = sys_user_allocate_page();
+  // uint64 argc_pa = user(current->pagetable, argc_va);
+  uint64 argv_pa = (uint64)user_va_to_pa(current->pagetable, (void *)argv_va);
+  uint64 para_pa = (uint64)user_va_to_pa(current->pagetable, (void *)para_va);
+  strcpy((char *)para_pa, (char *)temp_para);
+  // *((int*)argc_pa) = 1;
+  ((char **)argv_pa)[0] = (char *)para_va;
+  current->trapframe->regs.a0 = 1; // argc of the new program's main
+  current->trapframe->regs.a1 = argv_va; // argv of the new program's main
+  return exit_code;
+}
+
 //
 // [a0]: the syscall number; [a1] ... [a7]: arguments to the syscalls.
 // returns the code of success, (e.g., 0 means success, fail for otherwise)
@@ -241,7 +286,7 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
       return sys_user_open((char *)a1, a2);
     case SYS_user_read:
       return sys_user_read(a1, (char *)a2, a3);
-    case SYS_user_write:
+    case SYS_user_write: 
       return sys_user_write(a1, (char *)a2, a3);
     case SYS_user_lseek:
       return sys_user_lseek(a1, a2, a3);
@@ -265,6 +310,14 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
       return sys_user_link((char *)a1, (char *)a2);
     case SYS_user_unlink:
       return sys_user_unlink((char *)a1);
+    case SYS_user_wait:
+      return sys_user_wait(a1);
+    case SYS_user_exec: {
+      uint64 tmp_ret = sys_user_exec((char *)a1, (char *)a2);
+      //uint64 pid = current->pid; // convient for debug
+      //if (pid == 4) panic("s@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@s");
+      return tmp_ret;
+    }
     default:
       panic("Unknown syscall %ld \n", a0);
   }
